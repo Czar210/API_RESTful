@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Estatísticas de Jogador - LoL API</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 30px;
+      background: #eef1f5;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    .match {
+      background: #f0f8ff;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-left: 5px solid #1e90ff;
+      border-radius: 5px;
+    }
+    .stats {
+      background: #e6f7ff;
+      padding: 15px;
+      margin-top: 15px;
+      border-radius: 5px;
+      font-weight: bold;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Estatísticas do Jogador - League of Legends</h1>
+    <input type="text" id="name" placeholder="Nome do jogador (ex: Monochaco)" />
+    <input type="text" id="tag" placeholder="Tag (ex: BR1)" />
+    <input type="text" id="server" placeholder="Servidor (ex: br)" value="br" />
+    <input type="number" id="quantidade" placeholder="Quantas partidas deseja analisar?" min="1" max="30" value="5" />
+    <button onclick="buscar()">🔍 Buscar no banco</button>
+    <button onclick="forcarAtualizacao()">🔄 Atualizar com API</button>
+    <div id="resultado"></div>
+  </div>
+
+  <script>
+    function calcularEstatisticas(partidas) {
+      const media = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+      const stats = prop => partidas.map(p => p[prop] || 0);
+      const winRate = partidas.map(p => p.win ? 1 : 0);
+
+      return {
+        partidas: partidas.length,
+        kills: media(stats("kills")).toFixed(2),
+        deaths: media(stats("deaths")).toFixed(2),
+        assists: media(stats("assists")).toFixed(2),
+        gold: media(stats("goldEarned")).toFixed(0),
+        damage: media(stats("damageDealtToObjectives")).toFixed(0),
+        bounty: media(stats("bountyLevel")).toFixed(2),
+        duration: (media(stats("gameDuration")) / 60).toFixed(1),
+        winRate: (media(winRate) * 100).toFixed(1)
+      };
+    }
+
+    async function buscar() {
+      const name = document.getElementById("name").value;
+      const tag = document.getElementById("tag").value;
+      const server = document.getElementById("server").value || "br";
+      const qtd = parseInt(document.getElementById("quantidade").value) || 5;
+      const resultado = document.getElementById("resultado");
+      resultado.innerHTML = "⏳ Buscando partidas no banco...";
+
+      try {
+        const res = await fetch(`http://localhost:5000/player?name=${name}&tag=${tag}&server=${server}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          resultado.innerHTML = `<p class="error">❌ Erro: ${data.error || "Erro desconhecido"}</p>`;
+          return;
+        }
+
+        exibirResultados(data, name, tag, qtd);
+      } catch (e) {
+        resultado.innerHTML = `<p class="error">❌ Erro: ${e.message}</p>`;
+      }
+    }
+
+    async function forcarAtualizacao() {
+      const name = document.getElementById("name").value;
+      const tag = document.getElementById("tag").value;
+      const server = document.getElementById("server").value || "br";
+      const qtd = parseInt(document.getElementById("quantidade").value) || 5;
+      const resultado = document.getElementById("resultado");
+      resultado.innerHTML = "⏳ Atualizando dados pela API...";
+
+      try {
+        const res = await fetch("http://localhost:5000/player", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, tag, server, count: 20 })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          resultado.innerHTML = `<p class="error">❌ Erro ao atualizar: ${data.error || "Erro desconhecido"}</p>`;
+          return;
+        }
+
+        exibirResultados(data.matches, name, tag, qtd);
+      } catch (e) {
+        resultado.innerHTML = `<p class="error">❌ Erro na requisição POST: ${e.message}</p>`;
+      }
+    }
+
+    function exibirResultados(partidas, name, tag, qtd) {
+      const resultado = document.getElementById("resultado");
+      const partidasSelecionadas = partidas.slice(0, qtd);
+      const stats = calcularEstatisticas(partidasSelecionadas);
+
+      let html = `<div class="stats">
+        <h2>👤 ${name}#${tag}</h2>
+        🧠 Estatísticas médias em ${stats.partidas} partidas:<br>
+        🗡️ Kills: ${stats.kills}<br>
+        💀 Deaths: ${stats.deaths}<br>
+        🤝 Assists: ${stats.assists}<br>
+        💰 Ouro médio: ${stats.gold}<br>
+        🎯 Dano a objetivos: ${stats.damage}<br>
+        👑 Nível de recompensa: ${stats.bounty}<br>
+        ⏱️ Duração média: ${stats.duration} minutos<br>
+        🏆 Taxa de vitória: ${stats.winRate}%
+      </div><br><h3>📂 Amostra de partidas:</h3>`;
+
+      partidasSelecionadas.forEach((p, i) => {
+        html += `<div class="match">
+          <b>Partida ${i + 1}</b> - Campeão: ${p.championName}<br>
+          Vitória: ${p.win ? "✅" : "❌"}<br>
+          Score: ${p.kills}/${p.deaths}/${p.assists}<br>
+          Ouro: ${p.goldEarned}, Dano a Objetivos: ${p.damageDealtToObjectives}, Tempo: ${(p.gameDuration / 60).toFixed(1)} min
+        </div>`;
+      });
+
+      resultado.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
+
